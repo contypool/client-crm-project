@@ -1,7 +1,15 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { STORAGE_KEY, loadClients, saveClients } from '../src/storage.js';
+import { setClientStatus } from '../src/clients.js';
+import {
+  STATUS_FILTER_KEY,
+  STORAGE_KEY,
+  loadClients,
+  loadStatusFilter,
+  saveClients,
+  saveStatusFilter,
+} from '../src/storage.js';
 
 // In-memory stand-in for window.localStorage.
 function createMemoryStorage(initial = {}) {
@@ -47,4 +55,39 @@ test('returns an empty list when saved data is corrupted', () => {
 
 test('returns an empty list when saved data is not a list', () => {
   assert.deepEqual(loadClients(createMemoryStorage({ [STORAGE_KEY]: '{"id":"a"}' })), []);
+});
+
+test('clients saved before statuses existed load unchanged', () => {
+  const legacy = JSON.stringify(clients);
+  assert.deepEqual(loadClients(createMemoryStorage({ [STORAGE_KEY]: legacy })), clients);
+});
+
+test('a changed status is restored after a reload', () => {
+  const storage = createMemoryStorage();
+  saveClients(storage, setClientStatus(clients, 'b', 'done'));
+  const [first, second] = loadClients(storage);
+  assert.equal(first.status, undefined);
+  assert.equal(second.status, 'done');
+});
+
+test('status filter is "all" when nothing is saved yet', () => {
+  assert.equal(loadStatusFilter(createMemoryStorage()), 'all');
+});
+
+test('saved status filter is restored after a reload', () => {
+  const storage = createMemoryStorage();
+  saveStatusFilter(storage, 'in_progress');
+  assert.equal(loadStatusFilter(storage), 'in_progress');
+});
+
+test('an unknown saved status filter falls back to "all"', () => {
+  assert.equal(loadStatusFilter(createMemoryStorage({ [STATUS_FILTER_KEY]: 'archived' })), 'all');
+});
+
+test('saving the status filter does not touch saved clients', () => {
+  const storage = createMemoryStorage();
+  saveClients(storage, clients);
+  saveStatusFilter(storage, 'done');
+  assert.notEqual(STATUS_FILTER_KEY, STORAGE_KEY);
+  assert.deepEqual(loadClients(storage), clients);
 });
