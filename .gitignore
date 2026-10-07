@@ -1,0 +1,23 @@
+# Dependencies (none yet, but keep them out if added)
+node_modules/
+
+# Logs and test output
+*.log
+npm-debug.log*
+coverage/
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Local Claude Code settings
+.claude/settings.local.json
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

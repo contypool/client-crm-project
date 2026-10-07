@@ -1,0 +1,14 @@
+{
+  "name": "client-crm",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Учебная мини-CRM для учёта клиентов",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  }
+}
