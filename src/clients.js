@@ -113,6 +113,14 @@ export function validateClient(input, { clients = [], exceptId } = {}) {
   return { valid: Object.keys(errors).length === 0, errors };
 }
 
+// Client form fields in the order they appear on the page.
+export const CLIENT_FIELDS = ['name', 'phone'];
+
+// The field that should get focus after a failed validation, or null.
+export function firstInvalidField(errors) {
+  return CLIENT_FIELDS.find((field) => errors?.[field]) ?? null;
+}
+
 function assertValid(input, options) {
   const { valid, errors } = validateClient(input, options);
   if (!valid) {

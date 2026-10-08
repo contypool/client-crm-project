@@ -4,6 +4,7 @@ import {
   SORT_OPTIONS,
   STATUSES,
   createClient,
+  firstInvalidField,
   getClientStatus,
   getVisibleClients,
   removeClient,
@@ -91,9 +92,18 @@ function appendOptions(select, options) {
   }
 }
 
+function setInvalid(input, message) {
+  if (message) {
+    input.setAttribute('aria-invalid', 'true');
+  } else {
+    input.removeAttribute('aria-invalid');
+  }
+}
+
 function showErrors(errors) {
   for (const [field, element] of Object.entries(errorFields)) {
     element.textContent = errors[field] ?? '';
+    setInvalid(form.elements[field], errors[field]);
   }
 }
 
@@ -252,6 +262,7 @@ function createEditField(field, labelText, type) {
   input.autocomplete = 'off';
   input.value = editing[field];
   input.setAttribute('aria-describedby', `edit-${field}-error`);
+  setInvalid(input, editing.errors[field]);
   input.addEventListener('input', () => {
     editing[field] = input.value;
   });
@@ -285,7 +296,7 @@ function renderEditForm(item, client) {
     const { valid, errors } = validateClient(input, { clients, exceptId: client.id });
     if (!valid) {
       editing.errors = errors;
-      focusLater(errors.name ? '#edit-name' : '#edit-phone');
+      focusLater(`#edit-${firstInvalidField(errors)}`);
       render();
       return;
     }
@@ -356,6 +367,7 @@ form.addEventListener('submit', (event) => {
   const { valid, errors } = validateClient(input, { clients });
   showErrors(errors);
   if (!valid) {
+    form.elements[firstInvalidField(errors)].focus();
     return;
   }
 

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   ALL_STATUSES,
+  CLIENT_FIELDS,
   DEFAULT_SORT,
   DEFAULT_STATUS,
   SORT_OPTIONS,
@@ -10,6 +11,7 @@ import {
   createClient,
   filterClientsByStatus,
   findClientWithPhone,
+  firstInvalidField,
   getClientStatus,
   getVisibleClients,
   isValidSort,
@@ -59,6 +61,22 @@ test('reports both errors when name and phone are missing', () => {
   const result = validateClient({});
   assert.equal(result.valid, false);
   assert.deepEqual(Object.keys(result.errors).sort(), ['name', 'phone']);
+});
+
+test('form fields are listed in page order', () => {
+  assert.deepEqual(CLIENT_FIELDS, ['name', 'phone']);
+});
+
+test('firstInvalidField picks the first field with an error in page order', () => {
+  assert.equal(firstInvalidField(validateClient({}).errors), 'name');
+  assert.equal(firstInvalidField({ phone: 'Ошибка', name: 'Ошибка' }), 'name');
+  assert.equal(firstInvalidField(validateClient({ name: 'Иван', phone: 'abc' }).errors), 'phone');
+});
+
+test('firstInvalidField returns null when there are no errors', () => {
+  assert.equal(firstInvalidField({}), null);
+  assert.equal(firstInvalidField(validateClient({ name: 'Иван', phone: '123' }).errors), null);
+  assert.equal(firstInvalidField(undefined), null);
 });
 
 test('createClient trims fields and adds id, status "new" and creation date', () => {
