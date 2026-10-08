@@ -7,9 +7,13 @@ import {
   STATUSES,
   createClient,
   filterClientsByStatus,
+  findClientWithPhone,
   getClientStatus,
   isValidStatusFilter,
+  normalizePhone,
+  removeClient,
   setClientStatus,
+  updateClient,
   validateClient,
 } from '../src/clients.js';
 
@@ -140,4 +144,114 @@ test('isValidStatusFilter accepts "all" and known statuses only', () => {
   for (const value of [null, '', 'Все', 'archived']) {
     assert.equal(isValidStatusFilter(value), false);
   }
+});
+
+const directory = [
+  { id: 'a', name: 'Иван Петров', phone: '+7 (900) 000-00-00', status: 'done', createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: 'b', name: 'ООО Ромашка', phone: '123-45', createdAt: '2026-10-02T10:00:00.000Z' },
+];
+
+test('normalizePhone ignores spaces, brackets, dashes and "+"', () => {
+  assert.equal(normalizePhone('+7 (900) 000-00-00'), '79000000000');
+  assert.equal(normalizePhone(' 12 3-45 '), '12345');
+  assert.equal(normalizePhone(undefined), '');
+});
+
+test('findClientWithPhone finds a client with the same phone written differently', () => {
+  assert.equal(findClientWithPhone(directory, '79000000000'), directory[0]);
+  assert.equal(findClientWithPhone(directory, '12345'), directory[1]);
+});
+
+test('findClientWithPhone skips the client being edited', () => {
+  assert.equal(findClientWithPhone(directory, '+7 900 000 00 00', 'a'), undefined);
+  assert.equal(findClientWithPhone(directory, '12345', 'a'), directory[1]);
+});
+
+test('findClientWithPhone finds nothing for a new phone or a phone without digits', () => {
+  assert.equal(findClientWithPhone(directory, '555'), undefined);
+  assert.equal(findClientWithPhone([{ id: 'x', name: 'X', phone: '()' }], '+ -'), undefined);
+});
+
+test('validateClient rejects a phone that another client already has', () => {
+  const result = validateClient({ name: 'Новый', phone: '7 900 000 00 00' }, { clients: directory });
+  assert.equal(result.valid, false);
+  assert.equal(result.errors.phone, 'Этот телефон уже указан у клиента «Иван Петров».');
+});
+
+test('validateClient does not compare the edited client with itself', () => {
+  const result = validateClient({ name: 'Иван', phone: '+7 (900) 000-00-00' }, { clients: directory, exceptId: 'a' });
+  assert.deepEqual(result, { valid: true, errors: {} });
+});
+
+test('createClient rejects a duplicate phone', () => {
+  assert.throws(
+    () => createClient({ name: 'Пётр', phone: '123 45' }, { ...options, clients: directory }),
+    (error) => error.fields.phone === 'Этот телефон уже указан у клиента «ООО Ромашка».',
+  );
+});
+
+test('createClient keeps the phone exactly as typed (only trimmed)', () => {
+  const client = createClient({ name: 'Пётр', phone: ' +7 (901) 111-22-33 ' }, { ...options, clients: directory });
+  assert.equal(client.phone, '+7 (901) 111-22-33');
+});
+
+test('updateClient changes name and phone and keeps id, status and createdAt', () => {
+  const result = updateClient(directory, 'a', { name: '  Иван Иванов ', phone: ' 8 (900) 111-11-11 ' });
+  assert.deepEqual(result[0], {
+    id: 'a',
+    name: 'Иван Иванов',
+    phone: '8 (900) 111-11-11',
+    status: 'done',
+    createdAt: '2026-10-01T10:00:00.000Z',
+  });
+});
+
+test('updateClient keeps a missing status missing for clients from stage 1', () => {
+  const [, updated] = updateClient(directory, 'b', { name: 'ООО Ромашка', phone: '999' });
+  assert.equal('status' in updated, false);
+  assert.equal(updated.createdAt, '2026-10-02T10:00:00.000Z');
+});
+
+test('updateClient does not touch other clients or the original list', () => {
+  const copy = structuredClone(directory);
+  const result = updateClient(directory, 'a', { name: 'Иван', phone: '1' });
+  assert.equal(result[1], directory[1]);
+  assert.deepEqual(directory, copy);
+});
+
+test('updateClient allows keeping the same phone', () => {
+  const [updated] = updateClient(directory, 'a', { name: 'Иван', phone: '79000000000' });
+  assert.equal(updated.phone, '79000000000');
+});
+
+test('updateClient rejects empty fields', () => {
+  assert.throws(() => updateClient(directory, 'a', { name: ' ', phone: '' }), (error) => {
+    assert.deepEqual(Object.keys(error.fields).sort(), ['name', 'phone']);
+    return true;
+  });
+});
+
+test('updateClient rejects a phone of another client', () => {
+  assert.throws(
+    () => updateClient(directory, 'b', { name: 'ООО Ромашка', phone: '+79000000000' }),
+    (error) => error.fields.phone === 'Этот телефон уже указан у клиента «Иван Петров».',
+  );
+});
+
+test('updateClient leaves the list unchanged for an unknown id', () => {
+  assert.deepEqual(updateClient(directory, 'missing', { name: 'X', phone: '555' }), directory);
+});
+
+test('removeClient removes only the given client', () => {
+  assert.deepEqual(removeClient(directory, 'a'), [directory[1]]);
+});
+
+test('removeClient does not modify the original list', () => {
+  const copy = structuredClone(directory);
+  removeClient(directory, 'b');
+  assert.deepEqual(directory, copy);
+});
+
+test('removeClient leaves the list unchanged for an unknown id', () => {
+  assert.deepEqual(removeClient(directory, 'missing'), directory);
 });

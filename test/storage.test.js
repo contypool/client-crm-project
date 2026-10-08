@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { setClientStatus } from '../src/clients.js';
+import { removeClient, setClientStatus, updateClient } from '../src/clients.js';
 import {
   STATUS_FILTER_KEY,
   STORAGE_KEY,
@@ -89,5 +89,36 @@ test('saving the status filter does not touch saved clients', () => {
   saveClients(storage, clients);
   saveStatusFilter(storage, 'done');
   assert.notEqual(STATUS_FILTER_KEY, STORAGE_KEY);
+  assert.deepEqual(loadClients(storage), clients);
+});
+
+test('an edited client is restored after a reload with the same id, status and createdAt', () => {
+  const storage = createMemoryStorage();
+  const withStatus = setClientStatus(clients, 'a', 'in_progress');
+  saveClients(storage, updateClient(withStatus, 'a', { name: 'Иван Иванов', phone: '+7 900 111-11-11' }));
+  const [restored] = loadClients(storage);
+  assert.deepEqual(restored, {
+    id: 'a',
+    name: 'Иван Иванов',
+    phone: '+7 900 111-11-11',
+    status: 'in_progress',
+    createdAt: '2026-10-07T10:00:00.000Z',
+  });
+});
+
+test('a removed client is gone after a reload, others stay', () => {
+  const storage = createMemoryStorage();
+  saveClients(storage, clients);
+  saveClients(storage, removeClient(loadClients(storage), 'a'));
+  assert.deepEqual(loadClients(storage), [clients[1]]);
+});
+
+test('cancelled deletion leaves saved data unchanged', () => {
+  const storage = createMemoryStorage();
+  saveClients(storage, clients);
+  const before = storage.getItem(STORAGE_KEY);
+  // Cancelling means removeClient's result is never saved.
+  removeClient(loadClients(storage), 'a');
+  assert.equal(storage.getItem(STORAGE_KEY), before);
   assert.deepEqual(loadClients(storage), clients);
 });

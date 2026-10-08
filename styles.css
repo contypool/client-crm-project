@@ -126,3 +126,34 @@ button {
 #client-list span {
   color: var(--muted);
 }
+
+#client-list li.editing,
+#client-list li.confirming {
+  align-items: center;
+}
+
+#client-list .question {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-form {
+  flex: 1 1 100%;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+
+button.danger {
+  background: var(--error);
+}
