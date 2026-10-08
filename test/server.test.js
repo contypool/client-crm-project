@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -37,6 +37,16 @@ test('serves the page at /', async () => {
 test('serves styles and scripts with the right content type', async () => {
   assert.deepEqual(await get('/styles.css'), { status: 200, type: 'text/css; charset=utf-8' });
   assert.deepEqual(await get('/src/app.js'), { status: 200, type: 'text/javascript; charset=utf-8' });
+});
+
+test('the new client form has no named fields, so a submit without scripts puts no data in the URL', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  const clientForm = html.match(/<form id="client-form"[\s\S]*?<\/form>/)[0];
+  const inputs = clientForm.match(/<input\b[^>]*>/g);
+  assert.equal(inputs.length, 2);
+  for (const input of inputs) {
+    assert.doesNotMatch(input, /\sname=/, input);
+  }
 });
 
 test('answers 404 for a missing file', async () => {

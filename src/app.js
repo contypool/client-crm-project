@@ -13,10 +13,12 @@ import {
 } from './clients.js';
 import {
   LOAD_PROBLEMS,
+  clientsStorageAfterLoad,
+  commitClients,
   loadClients,
   loadSort,
   loadStatusFilter,
-  saveClients,
+  openStorage,
   saveSort,
   saveStatusFilter,
 } from './storage.js';
@@ -26,6 +28,7 @@ const list = document.querySelector('#client-list');
 const emptyMessage = document.querySelector('#empty-message');
 const listTitle = document.querySelector('#list-title');
 const dataWarning = document.querySelector('#data-warning');
+const saveWarning = document.querySelector('#save-warning');
 const statusFilter = document.querySelector('#status-filter');
 const searchInput = document.querySelector('#search');
 const sortSelect = document.querySelector('#sort');
@@ -39,12 +42,38 @@ const DATA_WARNINGS = {
     'Сохранённые данные повреждены и не могут быть прочитаны. ' +
     'Копия сохранена в localStorage под ключом client-crm.clients.backup.',
   [LOAD_PROBLEMS.repaired]: 'Часть сохранённых данных была повреждена и исправлена. Исходная копия сохранена.',
+  [LOAD_PROBLEMS.unavailable]:
+    'Хранилище браузера недоступно. Сохранённые данные не загружены, ' +
+    'новые изменения сохранить нельзя: приложение работает только для чтения.',
 };
 
-const loaded = loadClients(window.localStorage);
+const BACKUP_FAILED_WARNINGS = {
+  [LOAD_PROBLEMS.unreadable]:
+    'Сохранённые данные повреждены и не могут быть прочитаны. ' +
+    'Сохранить их копию не удалось: хранилище браузера переполнено или недоступно. ' +
+    'Чтобы не потерять исходные данные, список клиентов открыт только для чтения: ' +
+    'изменения не сохраняются. Освободите место в хранилище и перезагрузите страницу.',
+  [LOAD_PROBLEMS.repaired]:
+    'Часть сохранённых данных повреждена и исправлена только на этой странице. ' +
+    'Сохранить копию исходных данных не удалось, поэтому они не перезаписываются: ' +
+    'список клиентов открыт только для чтения, изменения не сохраняются. ' +
+    'Освободите место в хранилище и перезагрузите страницу.',
+};
+
+const SAVE_FAILED_WARNING =
+  'Не удалось сохранить изменения: хранилище браузера недоступно или переполнено. Данные остались прежними.';
+const READ_ONLY_WARNING = 'Изменения не сохранены: список клиентов открыт только для чтения. Данные остались прежними.';
+
+// null when the browser blocks localStorage.
+const storage = openStorage();
+const loaded = loadClients(storage);
+// null when clients are read-only (no storage, or damaged data without a backup):
+// then every change to clients fails and nothing changes.
+const clientsStorage = clientsStorageAfterLoad(storage, loaded);
+const saveFailedWarning = clientsStorage === null ? READ_ONLY_WARNING : SAVE_FAILED_WARNING;
 let clients = loaded.clients;
 if (loaded.problem) {
-  dataWarning.textContent = DATA_WARNINGS[loaded.problem];
+  dataWarning.textContent = (loaded.backupFailed ? BACKUP_FAILED_WARNINGS : DATA_WARNINGS)[loaded.problem];
   dataWarning.hidden = false;
 }
 
@@ -68,9 +97,14 @@ function showErrors(errors) {
   }
 }
 
+// Returns true when the change was saved. Otherwise `clients` stays as it was
+// and a warning is shown; the caller then keeps the form or row as it is.
 function persist(nextClients) {
-  clients = nextClients;
-  saveClients(window.localStorage, clients);
+  const result = commitClients(clientsStorage, clients, nextClients);
+  clients = result.clients;
+  saveWarning.textContent = result.saved ? '' : saveFailedWarning;
+  saveWarning.hidden = result.saved;
+  return result.saved;
 }
 
 function createButton(text, className, onClick) {
@@ -154,6 +188,7 @@ function createStatusSelect(client) {
   select.value = getClientStatus(client);
   select.addEventListener('change', () => {
     const previousIds = renderedClientIds();
+    // If saving fails, render() puts the previous status back into the select.
     persist(setClientStatus(clients, client.id, select.value));
     focusClientOrNeighbor(client.id, 'status', previousIds);
     render();
@@ -190,8 +225,10 @@ function renderDeleteConfirmation(item, client) {
   actions.className = 'actions';
   const confirmButton = createButton('Подтвердить', 'danger', () => {
     const previousIds = renderedClientIds();
+    if (!persist(removeClient(clients, client.id))) {
+      return;
+    }
     deletingId = null;
-    persist(removeClient(clients, client.id));
     focusClientOrNeighbor(client.id, 'delete', previousIds);
     render();
   });
@@ -252,7 +289,9 @@ function renderEditForm(item, client) {
       render();
       return;
     }
-    persist(updateClient(clients, client.id, input));
+    if (!persist(updateClient(clients, client.id, input))) {
+      return;
+    }
     editing = null;
     focusLater(actionSelector('edit', client.id));
     render();
@@ -319,7 +358,9 @@ form.addEventListener('submit', (event) => {
   }
 
   const client = createClient(input, { id: crypto.randomUUID(), now: new Date(), clients });
-  persist([...clients, client]);
+  if (!persist([...clients, client])) {
+    return; // the typed name and phone stay in the form
+  }
   form.reset();
   form.elements.name.focus();
   render();
@@ -331,13 +372,14 @@ list.addEventListener('keydown', (event) => {
   }
 });
 
+// If the filter or sort cannot be saved, it still applies until the page is reloaded.
 statusFilter.addEventListener('change', () => {
-  saveStatusFilter(window.localStorage, statusFilter.value);
+  saveStatusFilter(storage, statusFilter.value);
   render();
 });
 
 sortSelect.addEventListener('change', () => {
-  saveSort(window.localStorage, sortSelect.value);
+  saveSort(storage, sortSelect.value);
   render();
 });
 
@@ -346,6 +388,6 @@ searchInput.addEventListener('input', render);
 
 appendOptions(statusFilter, STATUSES);
 appendOptions(sortSelect, SORT_OPTIONS);
-statusFilter.value = loadStatusFilter(window.localStorage);
-sortSelect.value = loadSort(window.localStorage);
+statusFilter.value = loadStatusFilter(storage);
+sortSelect.value = loadSort(storage);
 render();

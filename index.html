@@ -12,16 +12,17 @@
     <h1>Мини-CRM</h1>
 
     <p id="data-warning" class="warning" role="alert" hidden></p>
+    <p id="save-warning" class="warning" role="alert" hidden></p>
 
     <section aria-labelledby="form-title">
       <h2 id="form-title">Новый клиент</h2>
       <form id="client-form" novalidate>
         <label for="name">Имя</label>
-        <input id="name" name="name" type="text" autocomplete="off" aria-describedby="name-error">
+        <input id="name" type="text" autocomplete="off" aria-describedby="name-error">
         <p id="name-error" class="error" aria-live="polite"></p>
 
         <label for="phone">Телефон</label>
-        <input id="phone" name="phone" type="tel" autocomplete="off" aria-describedby="phone-error">
+        <input id="phone" type="tel" autocomplete="off" aria-describedby="phone-error">
         <p id="phone-error" class="error" aria-live="polite"></p>
 
         <button type="submit">Добавить</button>
