@@ -289,11 +289,13 @@ function renderEditForm(item, client) {
       render();
       return;
     }
+    const previousIds = renderedClientIds();
     if (!persist(updateClient(clients, client.id, input))) {
-      return;
+      return; // the edit form stays open with the typed values
     }
     editing = null;
-    focusLater(actionSelector('edit', client.id));
+    // The edited client may no longer match the search.
+    focusClientOrNeighbor(client.id, 'edit', previousIds);
     render();
   });
 
