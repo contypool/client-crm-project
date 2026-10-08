@@ -3,11 +3,14 @@ import assert from 'node:assert/strict';
 
 import { removeClient, setClientStatus, updateClient } from '../src/clients.js';
 import {
+  SORT_KEY,
   STATUS_FILTER_KEY,
   STORAGE_KEY,
   loadClients,
+  loadSort,
   loadStatusFilter,
   saveClients,
+  saveSort,
   saveStatusFilter,
 } from '../src/storage.js';
 
@@ -121,4 +124,28 @@ test('cancelled deletion leaves saved data unchanged', () => {
   removeClient(loadClients(storage), 'a');
   assert.equal(storage.getItem(STORAGE_KEY), before);
   assert.deepEqual(loadClients(storage), clients);
+});
+
+test('sort is the default when nothing is saved yet', () => {
+  assert.equal(loadSort(createMemoryStorage()), 'created-asc');
+});
+
+test('saved sort is restored after a reload', () => {
+  const storage = createMemoryStorage();
+  saveSort(storage, 'name-desc');
+  assert.equal(loadSort(storage), 'name-desc');
+});
+
+test('an unknown saved sort falls back to the default', () => {
+  assert.equal(loadSort(createMemoryStorage({ [SORT_KEY]: 'price' })), 'created-asc');
+});
+
+test('saving the sort does not touch clients or the status filter', () => {
+  const storage = createMemoryStorage();
+  saveClients(storage, clients);
+  saveStatusFilter(storage, 'done');
+  saveSort(storage, 'name-asc');
+  assert.equal(new Set([SORT_KEY, STATUS_FILTER_KEY, STORAGE_KEY]).size, 3);
+  assert.deepEqual(loadClients(storage), clients);
+  assert.equal(loadStatusFilter(storage), 'done');
 });

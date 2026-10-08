@@ -3,16 +3,22 @@ import assert from 'node:assert/strict';
 
 import {
   ALL_STATUSES,
+  DEFAULT_SORT,
   DEFAULT_STATUS,
+  SORT_OPTIONS,
   STATUSES,
   createClient,
   filterClientsByStatus,
   findClientWithPhone,
   getClientStatus,
+  getVisibleClients,
+  isValidSort,
   isValidStatusFilter,
   normalizePhone,
   removeClient,
+  searchClients,
   setClientStatus,
+  sortClients,
   updateClient,
   validateClient,
 } from '../src/clients.js';
@@ -254,4 +260,103 @@ test('removeClient does not modify the original list', () => {
 
 test('removeClient leaves the list unchanged for an unknown id', () => {
   assert.deepEqual(removeClient(directory, 'missing'), directory);
+});
+
+const people = [
+  { id: '1', name: 'Жанна', phone: '+7 (900) 111-22-33', status: 'done', createdAt: '2026-10-03T10:00:00.000Z' },
+  { id: '2', name: 'алексей', phone: '8 900 444 55 66', status: 'in_progress', createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: '3', name: 'Ёлка', phone: '123-45', createdAt: '2026-10-04T10:00:00.000Z' },
+  { id: '4', name: 'Елена', phone: '(555) 000', status: 'in_progress', createdAt: '2026-10-02T10:00:00.000Z' },
+];
+const names = (list) => list.map((client) => client.name);
+
+test('search by name ignores case and matches part of the name', () => {
+  assert.deepEqual(names(searchClients(people, 'ЖАН')), ['Жанна']);
+  assert.deepEqual(names(searchClients(people, 'Алекс')), ['алексей']);
+  assert.deepEqual(names(searchClients(people, 'ЁЛ')), ['Ёлка']);
+});
+
+test('search by phone ignores spaces, brackets, dashes and "+"', () => {
+  assert.deepEqual(names(searchClients(people, '900-111')), ['Жанна']);
+  assert.deepEqual(names(searchClients(people, '(444) 55')), ['алексей']);
+  assert.deepEqual(names(searchClients(people, '+7 900 111 22 33')), ['Жанна']);
+  assert.deepEqual(names(searchClients(people, '900')), ['Жанна', 'алексей']);
+});
+
+test('search uses the shared phone normalization', () => {
+  const query = ' (12) 3-45 ';
+  assert.equal(normalizePhone(query), '12345');
+  assert.deepEqual(names(searchClients(people, query)), ['Ёлка']);
+});
+
+test('an empty or whitespace-only query returns all clients', () => {
+  assert.equal(searchClients(people, ''), people);
+  assert.equal(searchClients(people, '   '), people);
+  assert.equal(searchClients(people, undefined), people);
+});
+
+test('search returns an empty list when nothing matches', () => {
+  assert.deepEqual(searchClients(people, 'Зинаида'), []);
+  assert.deepEqual(searchClients(people, '777'), []);
+});
+
+test('search does not match every phone for a query of separators only', () => {
+  assert.deepEqual(searchClients(people, '+ -'), []);
+});
+
+test('sort options and default sort', () => {
+  assert.deepEqual(SORT_OPTIONS.map((option) => option.value), ['created-asc', 'created-desc', 'name-asc', 'name-desc']);
+  assert.equal(DEFAULT_SORT, 'created-asc');
+  assert.equal(isValidSort('name-asc'), true);
+  assert.equal(isValidSort('price'), false);
+  assert.equal(isValidSort(null), false);
+});
+
+test('sort by name A–Я uses Russian collation, ignores case and puts Ё after Е', () => {
+  assert.deepEqual(names(sortClients(people, 'name-asc')), ['алексей', 'Елена', 'Ёлка', 'Жанна']);
+});
+
+test('sort by name Я–А reverses the order', () => {
+  assert.deepEqual(names(sortClients(people, 'name-desc')), ['Жанна', 'Ёлка', 'Елена', 'алексей']);
+});
+
+test('sort by creation date in both directions', () => {
+  assert.deepEqual(names(sortClients(people, 'created-asc')), ['алексей', 'Елена', 'Жанна', 'Ёлка']);
+  assert.deepEqual(names(sortClients(people, 'created-desc')), ['Ёлка', 'Жанна', 'Елена', 'алексей']);
+});
+
+test('clients with the same name are ordered by creation date', () => {
+  const twins = [
+    { id: 'b', name: 'Иван', createdAt: '2026-10-02T10:00:00.000Z' },
+    { id: 'a', name: 'иван', createdAt: '2026-10-01T10:00:00.000Z' },
+  ];
+  assert.deepEqual(sortClients(twins, 'name-asc').map((client) => client.id), ['a', 'b']);
+});
+
+test('an unknown sort falls back to the default', () => {
+  assert.deepEqual(sortClients(people, 'price'), sortClients(people, DEFAULT_SORT));
+});
+
+test('sorting returns a new array and does not change the original list', () => {
+  const copy = structuredClone(people);
+  const sorted = sortClients(people, 'name-asc');
+  assert.notEqual(sorted, people);
+  assert.deepEqual(people, copy);
+});
+
+test('search, status filter and sort work together', () => {
+  const visible = getVisibleClients(people, { query: '900', status: 'in_progress', sort: 'name-asc' });
+  assert.deepEqual(names(visible), ['алексей']);
+
+  const inProgress = getVisibleClients(people, { query: '', status: 'in_progress', sort: 'name-desc' });
+  assert.deepEqual(names(inProgress), ['Елена', 'алексей']);
+
+  const all = getVisibleClients(people, { query: 'е', status: 'all', sort: 'name-asc' });
+  assert.deepEqual(names(all), ['алексей', 'Елена']);
+});
+
+test('getVisibleClients does not change the original list', () => {
+  const copy = structuredClone(people);
+  getVisibleClients(people, { query: '', status: 'all', sort: 'name-desc' });
+  assert.deepEqual(people, copy);
 });

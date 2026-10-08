@@ -28,10 +28,22 @@
 
     <section aria-labelledby="list-title">
       <h2 id="list-title">Клиенты</h2>
-      <label for="status-filter">Статус</label>
-      <select id="status-filter">
-        <option value="all">Все</option>
-      </select>
+      <div class="toolbar">
+        <div class="toolbar-search">
+          <label for="search">Поиск</label>
+          <input id="search" type="search" placeholder="Имя или телефон" autocomplete="off">
+        </div>
+        <div>
+          <label for="status-filter">Статус</label>
+          <select id="status-filter">
+            <option value="all">Все</option>
+          </select>
+        </div>
+        <div>
+          <label for="sort">Сортировка</label>
+          <select id="sort"></select>
+        </div>
+      </div>
       <p id="empty-message">Пока нет клиентов.</p>
       <ul id="client-list"></ul>
     </section>

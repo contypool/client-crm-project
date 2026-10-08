@@ -1,21 +1,31 @@
 // Connects the page (form and list) with the domain logic and storage.
 
 import {
+  SORT_OPTIONS,
   STATUSES,
   createClient,
-  filterClientsByStatus,
   getClientStatus,
+  getVisibleClients,
   removeClient,
   setClientStatus,
   updateClient,
   validateClient,
 } from './clients.js';
-import { loadClients, loadStatusFilter, saveClients, saveStatusFilter } from './storage.js';
+import {
+  loadClients,
+  loadSort,
+  loadStatusFilter,
+  saveClients,
+  saveSort,
+  saveStatusFilter,
+} from './storage.js';
 
 const form = document.querySelector('#client-form');
 const list = document.querySelector('#client-list');
 const emptyMessage = document.querySelector('#empty-message');
 const statusFilter = document.querySelector('#status-filter');
+const searchInput = document.querySelector('#search');
+const sortSelect = document.querySelector('#sort');
 const errorFields = {
   name: document.querySelector('#name-error'),
   phone: document.querySelector('#phone-error'),
@@ -28,8 +38,8 @@ let editing = null; // { id, name, phone, errors }
 let deletingId = null;
 let pendingFocus = null; // CSS selector inside the list to focus after render
 
-function appendStatusOptions(select) {
-  for (const { value, label } of STATUSES) {
+function appendOptions(select, options) {
+  for (const { value, label } of options) {
     const option = document.createElement('option');
     option.value = value;
     option.textContent = label;
@@ -92,7 +102,7 @@ function cancelDeleting() {
 function createStatusSelect(client) {
   const select = document.createElement('select');
   select.setAttribute('aria-label', `Статус клиента ${client.name}`);
-  appendStatusOptions(select);
+  appendOptions(select, STATUSES);
   select.value = getClientStatus(client);
   select.addEventListener('change', () => {
     persist(setClientStatus(clients, client.id, select.value));
@@ -205,8 +215,19 @@ function renderEditForm(item, client) {
   item.append(editForm);
 }
 
+function emptyText() {
+  if (clients.length === 0) {
+    return 'Пока нет клиентов.';
+  }
+  return searchInput.value.trim() === '' ? 'Нет клиентов с этим статусом.' : 'Ничего не найдено.';
+}
+
 function render() {
-  const visible = filterClientsByStatus(clients, statusFilter.value);
+  const visible = getVisibleClients(clients, {
+    query: searchInput.value,
+    status: statusFilter.value,
+    sort: sortSelect.value,
+  });
   list.replaceChildren();
   for (const client of visible) {
     const item = document.createElement('li');
@@ -221,7 +242,7 @@ function render() {
     }
     list.append(item);
   }
-  emptyMessage.textContent = clients.length === 0 ? 'Пока нет клиентов.' : 'Нет клиентов с этим статусом.';
+  emptyMessage.textContent = emptyText();
   emptyMessage.hidden = visible.length > 0;
 
   if (pendingFocus) {
@@ -261,6 +282,16 @@ statusFilter.addEventListener('change', () => {
   render();
 });
 
-appendStatusOptions(statusFilter);
+sortSelect.addEventListener('change', () => {
+  saveSort(window.localStorage, sortSelect.value);
+  render();
+});
+
+// The search query is intentionally not saved between reloads.
+searchInput.addEventListener('input', render);
+
+appendOptions(statusFilter, STATUSES);
+appendOptions(sortSelect, SORT_OPTIONS);
 statusFilter.value = loadStatusFilter(window.localStorage);
+sortSelect.value = loadSort(window.localStorage);
 render();

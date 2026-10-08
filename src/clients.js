@@ -106,3 +106,57 @@ export function updateClient(clients, id, input) {
 export function removeClient(clients, id) {
   return clients.filter((client) => client.id !== id);
 }
+
+// Search matches the name (case-insensitive) or the phone (normalized, so any format works).
+export function searchClients(clients, query) {
+  const text = String(query ?? '').trim().toLocaleLowerCase('ru');
+  if (text === '') {
+    return clients;
+  }
+  const phone = normalizePhone(text);
+  return clients.filter(
+    (client) =>
+      String(client.name ?? '').toLocaleLowerCase('ru').includes(text) ||
+      (phone !== '' && normalizePhone(client.phone).includes(phone)),
+  );
+}
+
+export const SORT_OPTIONS = [
+  { value: 'created-asc', label: 'Сначала старые' },
+  { value: 'created-desc', label: 'Сначала новые' },
+  { value: 'name-asc', label: 'По имени: А–Я' },
+  { value: 'name-desc', label: 'По имени: Я–А' },
+];
+
+export const DEFAULT_SORT = 'created-asc';
+
+export function isValidSort(sort) {
+  return SORT_OPTIONS.some((item) => item.value === sort);
+}
+
+const nameCollator = new Intl.Collator('ru', { sensitivity: 'base', numeric: true });
+
+function compareCreated(a, b) {
+  return String(a.createdAt ?? '').localeCompare(String(b.createdAt ?? ''));
+}
+
+function compareNames(a, b) {
+  return nameCollator.compare(String(a.name ?? ''), String(b.name ?? '')) || compareCreated(a, b);
+}
+
+const comparators = {
+  'created-asc': compareCreated,
+  'created-desc': (a, b) => compareCreated(b, a),
+  'name-asc': compareNames,
+  'name-desc': (a, b) => compareNames(b, a),
+};
+
+// Returns a new array; the original list is never reordered.
+export function sortClients(clients, sort) {
+  const compare = comparators[isValidSort(sort) ? sort : DEFAULT_SORT];
+  return [...clients].sort(compare);
+}
+
+export function getVisibleClients(clients, { query, status, sort }) {
+  return sortClients(filterClientsByStatus(searchClients(clients, query), status), sort);
+}

@@ -79,8 +79,24 @@ select {
   font: inherit;
 }
 
-#status-filter {
-  margin: 4px 0 12px;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.toolbar-search {
+  flex: 1 1 200px;
+}
+
+.toolbar label {
+  margin-bottom: 4px;
+}
+
+.toolbar select {
+  padding: 8px;
 }
 
 .error {
