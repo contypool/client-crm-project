@@ -37,6 +37,42 @@ export function filterClientsByStatus(clients, filter) {
   return clients.filter((client) => getClientStatus(client) === filter);
 }
 
+// Repairs a list read from storage: drops entries that are not objects, gives every
+// client a unique non-empty id and makes name and phone strings. Other fields
+// (status, createdAt, ...) are kept as is. Returns a new array; `changed` tells
+// whether anything had to be repaired.
+export function normalizeStoredClients(data, createId) {
+  const seenIds = new Set();
+  const clients = [];
+  let changed = false;
+
+  for (const item of data) {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      changed = true;
+      continue;
+    }
+
+    const client = { ...item };
+    let repaired = false;
+    if (typeof client.id !== 'string' || client.id === '' || seenIds.has(client.id)) {
+      client.id = createId();
+      repaired = true;
+    }
+    for (const field of ['name', 'phone']) {
+      if (typeof client[field] !== 'string') {
+        client[field] = typeof client[field] === 'number' ? String(client[field]) : '';
+        repaired = true;
+      }
+    }
+
+    seenIds.add(client.id);
+    clients.push(repaired ? client : item);
+    changed ||= repaired;
+  }
+
+  return { clients, changed };
+}
+
 // Phones are compared without spaces, brackets, dashes and "+",
 // but stored and shown exactly as the user typed them.
 export function normalizePhone(phone) {
@@ -64,6 +100,9 @@ export function validateClient(input, { clients = [], exceptId } = {}) {
   }
   if (phone === '') {
     errors.phone = 'Укажите телефон клиента.';
+  } else if (!/^\d+$/.test(normalizePhone(phone))) {
+    // After removing the allowed formatting only digits may remain, at least one.
+    errors.phone = 'Телефон может содержать только цифры, пробелы, скобки, дефисы и знак +.';
   } else {
     const duplicate = findClientWithPhone(clients, phone, exceptId);
     if (duplicate) {

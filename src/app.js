@@ -12,6 +12,7 @@ import {
   validateClient,
 } from './clients.js';
 import {
+  LOAD_PROBLEMS,
   loadClients,
   loadSort,
   loadStatusFilter,
@@ -23,6 +24,8 @@ import {
 const form = document.querySelector('#client-form');
 const list = document.querySelector('#client-list');
 const emptyMessage = document.querySelector('#empty-message');
+const listTitle = document.querySelector('#list-title');
+const dataWarning = document.querySelector('#data-warning');
 const statusFilter = document.querySelector('#status-filter');
 const searchInput = document.querySelector('#search');
 const sortSelect = document.querySelector('#sort');
@@ -31,12 +34,24 @@ const errorFields = {
   phone: document.querySelector('#phone-error'),
 };
 
-let clients = loadClients(window.localStorage);
+const DATA_WARNINGS = {
+  [LOAD_PROBLEMS.unreadable]:
+    'Сохранённые данные повреждены и не могут быть прочитаны. ' +
+    'Копия сохранена в localStorage под ключом client-crm.clients.backup.',
+  [LOAD_PROBLEMS.repaired]: 'Часть сохранённых данных была повреждена и исправлена. Исходная копия сохранена.',
+};
+
+const loaded = loadClients(window.localStorage);
+let clients = loaded.clients;
+if (loaded.problem) {
+  dataWarning.textContent = DATA_WARNINGS[loaded.problem];
+  dataWarning.hidden = false;
+}
 
 // Only one client row can be in edit or delete-confirmation mode at a time.
 let editing = null; // { id, name, phone, errors }
 let deletingId = null;
-let pendingFocus = null; // CSS selector inside the list to focus after render
+let pendingFocus = null; // function that moves focus after the next render
 
 function appendOptions(select, options) {
   for (const { value, label } of options) {
@@ -71,41 +86,76 @@ function actionSelector(action, id) {
   return `[data-action="${action}"][data-client-id="${CSS.escape(id)}"]`;
 }
 
+function focusLater(selector) {
+  pendingFocus = () => list.querySelector(selector)?.focus();
+}
+
+function renderedClientIds() {
+  return [...list.children].map((item) => item.dataset.clientId);
+}
+
+// After a change the client's row may be gone (deleted or hidden by the filter).
+// Then focus moves to the next client, or the previous one if it was last,
+// or to the list heading when the list is empty.
+function focusClientOrNeighbor(id, action, previousIds) {
+  pendingFocus = () => {
+    const own = list.querySelector(actionSelector(action, id));
+    if (own) {
+      own.focus();
+      return;
+    }
+    const index = previousIds.indexOf(id);
+    const neighbors = [...previousIds.slice(index + 1), ...previousIds.slice(0, index).reverse()];
+    for (const neighborId of neighbors) {
+      const button = list.querySelector(actionSelector('edit', neighborId));
+      if (button) {
+        button.focus();
+        return;
+      }
+    }
+    listTitle.focus();
+  };
+}
+
 function startEditing(client) {
   editing = { id: client.id, name: client.name, phone: client.phone, errors: {} };
   deletingId = null;
-  pendingFocus = '#edit-name';
+  focusLater('#edit-name');
   render();
 }
 
 function cancelEditing() {
   const id = editing.id;
   editing = null;
-  pendingFocus = actionSelector('edit', id);
+  focusLater(actionSelector('edit', id));
   render();
 }
 
 function startDeleting(client) {
   deletingId = client.id;
   editing = null;
-  pendingFocus = '[data-action="cancel-delete"]';
+  focusLater('[data-action="cancel-delete"]');
   render();
 }
 
 function cancelDeleting() {
   const id = deletingId;
   deletingId = null;
-  pendingFocus = actionSelector('delete', id);
+  focusLater(actionSelector('delete', id));
   render();
 }
 
 function createStatusSelect(client) {
   const select = document.createElement('select');
   select.setAttribute('aria-label', `Статус клиента ${client.name}`);
+  select.dataset.action = 'status';
+  select.dataset.clientId = client.id;
   appendOptions(select, STATUSES);
   select.value = getClientStatus(client);
   select.addEventListener('change', () => {
+    const previousIds = renderedClientIds();
     persist(setClientStatus(clients, client.id, select.value));
+    focusClientOrNeighbor(client.id, 'status', previousIds);
     render();
   });
   return select;
@@ -139,8 +189,10 @@ function renderDeleteConfirmation(item, client) {
   const actions = document.createElement('div');
   actions.className = 'actions';
   const confirmButton = createButton('Подтвердить', 'danger', () => {
+    const previousIds = renderedClientIds();
     deletingId = null;
     persist(removeClient(clients, client.id));
+    focusClientOrNeighbor(client.id, 'delete', previousIds);
     render();
   });
   const cancelButton = createButton('Отмена', 'secondary', cancelDeleting);
@@ -196,13 +248,13 @@ function renderEditForm(item, client) {
     const { valid, errors } = validateClient(input, { clients, exceptId: client.id });
     if (!valid) {
       editing.errors = errors;
-      pendingFocus = errors.name ? '#edit-name' : '#edit-phone';
+      focusLater(errors.name ? '#edit-name' : '#edit-phone');
       render();
       return;
     }
     persist(updateClient(clients, client.id, input));
     editing = null;
-    pendingFocus = actionSelector('edit', client.id);
+    focusLater(actionSelector('edit', client.id));
     render();
   });
 
@@ -231,6 +283,7 @@ function render() {
   list.replaceChildren();
   for (const client of visible) {
     const item = document.createElement('li');
+    item.dataset.clientId = client.id;
     if (editing?.id === client.id) {
       item.className = 'editing';
       renderEditForm(item, client);
@@ -246,8 +299,9 @@ function render() {
   emptyMessage.hidden = visible.length > 0;
 
   if (pendingFocus) {
-    list.querySelector(pendingFocus)?.focus();
+    const moveFocus = pendingFocus;
     pendingFocus = null;
+    moveFocus();
   }
 }
 

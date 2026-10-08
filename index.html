@@ -11,6 +11,8 @@
   <main>
     <h1>Мини-CRM</h1>
 
+    <p id="data-warning" class="warning" role="alert" hidden></p>
+
     <section aria-labelledby="form-title">
       <h2 id="form-title">Новый клиент</h2>
       <form id="client-form" novalidate>
@@ -27,7 +29,7 @@
     </section>
 
     <section aria-labelledby="list-title">
-      <h2 id="list-title">Клиенты</h2>
+      <h2 id="list-title" tabindex="-1">Клиенты</h2>
       <div class="toolbar">
         <div class="toolbar-search">
           <label for="search">Поиск</label>

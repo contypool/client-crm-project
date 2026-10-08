@@ -15,6 +15,7 @@ import {
   isValidSort,
   isValidStatusFilter,
   normalizePhone,
+  normalizeStoredClients,
   removeClient,
   searchClients,
   setClientStatus,
@@ -359,4 +360,124 @@ test('getVisibleClients does not change the original list', () => {
   const copy = structuredClone(people);
   getVisibleClients(people, { query: '', status: 'all', sort: 'name-desc' });
   assert.deepEqual(people, copy);
+});
+
+function sequentialIds() {
+  let next = 0;
+  return () => `new-${++next}`;
+}
+
+const healthy = [
+  { id: 'a', name: 'Иван', phone: '1', status: 'done', createdAt: '2026-10-01T10:00:00.000Z' },
+  { id: 'b', name: 'Пётр', phone: '2', createdAt: '2026-10-02T10:00:00.000Z' },
+];
+
+test('normalizeStoredClients keeps a valid list as is', () => {
+  const result = normalizeStoredClients(healthy, sequentialIds());
+  assert.deepEqual(result, { clients: healthy, changed: false });
+  assert.equal(result.clients[0], healthy[0]);
+});
+
+test('normalizeStoredClients does not treat a missing status as damage', () => {
+  const legacy = [{ id: 'a', name: 'Иван', phone: '1', createdAt: '2026-10-01T10:00:00.000Z' }];
+  assert.equal(normalizeStoredClients(legacy, sequentialIds()).changed, false);
+});
+
+test('normalizeStoredClients drops entries that are not objects', () => {
+  const result = normalizeStoredClients([null, 5, 'text', [healthy[0]], true, healthy[1]], sequentialIds());
+  assert.deepEqual(result, { clients: [healthy[1]], changed: true });
+});
+
+test('normalizeStoredClients gives a new id when it is missing, empty or not a string', () => {
+  const data = [
+    { name: 'A', phone: '1' },
+    { id: '', name: 'B', phone: '2' },
+    { id: 7, name: 'C', phone: '3' },
+  ];
+  const result = normalizeStoredClients(data, sequentialIds());
+  assert.deepEqual(result.clients.map((client) => client.id), ['new-1', 'new-2', 'new-3']);
+  assert.equal(result.changed, true);
+});
+
+test('normalizeStoredClients gives a new id to a repeated id', () => {
+  const data = [healthy[0], { ...healthy[1], id: 'a' }];
+  const result = normalizeStoredClients(data, sequentialIds());
+  assert.deepEqual(result.clients.map((client) => client.id), ['a', 'new-1']);
+  assert.equal(result.clients[0], healthy[0]);
+});
+
+test('normalizeStoredClients makes name and phone strings', () => {
+  const data = [
+    { id: 'a', name: 42, phone: 900 },
+    { id: 'b' },
+    { id: 'c', name: { first: 'X' }, phone: null },
+  ];
+  const result = normalizeStoredClients(data, sequentialIds());
+  assert.deepEqual(
+    result.clients.map(({ name, phone }) => [name, phone]),
+    [['42', '900'], ['', ''], ['', '']],
+  );
+});
+
+test('normalizeStoredClients keeps status, createdAt and extra fields', () => {
+  const data = [{ name: 'A', phone: 1, status: 'in_progress', createdAt: '2026-10-01T10:00:00.000Z', note: 'x' }];
+  const [client] = normalizeStoredClients(data, sequentialIds()).clients;
+  assert.deepEqual(client, {
+    id: 'new-1',
+    name: 'A',
+    phone: '1',
+    status: 'in_progress',
+    createdAt: '2026-10-01T10:00:00.000Z',
+    note: 'x',
+  });
+});
+
+test('normalizeStoredClients does not modify the original data', () => {
+  const data = [null, { name: 1 }, { ...healthy[0] }];
+  const copy = structuredClone(data);
+  normalizeStoredClients(data, sequentialIds());
+  assert.deepEqual(data, copy);
+});
+
+test('after repair, deleting one client without an id keeps the others', () => {
+  const data = [{ name: 'A', phone: '1' }, { name: 'B', phone: '2' }, healthy[0]];
+  const { clients } = normalizeStoredClients(data, sequentialIds());
+  assert.deepEqual(removeClient(clients, clients[0].id).map((client) => client.name), ['B', 'Иван']);
+});
+
+test('after repair, search, filter and sort work with damaged entries', () => {
+  const { clients } = normalizeStoredClients([null, { name: null }, healthy[0]], sequentialIds());
+  const visible = getVisibleClients(clients, { query: '', status: 'all', sort: 'name-asc' });
+  assert.deepEqual(visible.map((client) => client.name), ['', 'Иван']);
+});
+
+const phoneFormatError = 'Телефон может содержать только цифры, пробелы, скобки, дефисы и знак +.';
+
+test('accepts phones with digits and allowed formatting', () => {
+  for (const phone of ['+420 123 456 789', '(420) 123-456', '123456']) {
+    assert.deepEqual(validateClient({ name: 'Иван', phone }), { valid: true, errors: {} }, phone);
+  }
+});
+
+test('rejects phones without digits', () => {
+  for (const phone of ['---', '+++', '( )', 'abc']) {
+    assert.equal(validateClient({ name: 'Иван', phone }).errors.phone, phoneFormatError, phone);
+  }
+});
+
+test('rejects phones with characters other than digits and allowed formatting', () => {
+  for (const phone of ['123abc', '123.456', '123/456', '+7 900 000-00-00 доб. 5']) {
+    assert.equal(validateClient({ name: 'Иван', phone }).errors.phone, phoneFormatError, phone);
+  }
+});
+
+test('createClient and updateClient reject a phone in a wrong format', () => {
+  assert.throws(
+    () => createClient({ name: 'Иван', phone: '123abc' }, options),
+    (error) => error.fields.phone === phoneFormatError,
+  );
+  assert.throws(
+    () => updateClient(directory, 'a', { name: 'Иван', phone: '+++' }),
+    (error) => error.fields.phone === phoneFormatError,
+  );
 });
