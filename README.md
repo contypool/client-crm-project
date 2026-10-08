@@ -36,6 +36,16 @@ node server.js
 node --test
 ```
 
+### Автозапуск тестов в Claude Code
+
+В `.claude/settings.json` настроен проектный hook `PostToolUse`: после того как Claude Code
+изменит файл с расширением `.js` внутри проекта (инструменты Edit, Write, MultiEdit),
+скрипт `.claude/hooks/run-tests-on-js-change.js` запускает `node --test`.
+Правки `.md`, `.css`, `.json`, `.html` и других файлов тесты не запускают.
+Если тесты прошли, Claude получает короткую сводку; если упали — вывод тестов.
+Hook ничего не изменяет и не устанавливает, ручные правки в редакторе его не запускают.
+После добавления hook может потребоваться перезапустить сессию Claude Code.
+
 ## Где хранятся данные
 
 Клиенты сохраняются в `localStorage` браузера под ключом `client-crm.clients`.
@@ -68,4 +78,5 @@ src/app.js          — форма и список на странице
 src/clients.js      — проверка и создание клиента
 src/storage.js      — сохранение и загрузка из localStorage
 test/               — тесты (node --test)
+.claude/            — проектные настройки Claude Code (hook автозапуска тестов)
 ```
