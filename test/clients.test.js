@@ -8,6 +8,7 @@ import {
   DEFAULT_STATUS,
   SORT_OPTIONS,
   STATUSES,
+  clientsToCsv,
   createClient,
   filterClientsByStatus,
   findClientWithPhone,
@@ -122,6 +123,36 @@ const stored = [
   { id: 'b', name: 'Пётр', phone: '2', status: 'in_progress', createdAt: '2026-10-07T11:00:00.000Z' },
   { id: 'c', name: 'Анна', phone: '3', status: 'done', createdAt: '2026-10-07T12:00:00.000Z' },
 ];
+
+test('clientsToCsv includes UTF-8 BOM, Russian headers, labels and creation dates', () => {
+  const csv = clientsToCsv(stored);
+  assert.ok(csv.startsWith('\uFEFF'));
+  assert.equal(csv, [
+    '\uFEFF"Имя","Телефон","Статус","Дата создания"',
+    '"Иван","1","Новый","2026-10-07T10:00:00.000Z"',
+    '"Пётр","2","В работе","2026-10-07T11:00:00.000Z"',
+    '"Анна","3","Завершён","2026-10-07T12:00:00.000Z"',
+    '',
+  ].join('\r\n'));
+});
+
+test('clientsToCsv escapes commas, double quotes and line breaks', () => {
+  const csv = clientsToCsv([{
+    name: 'ООО, "Ромашка"\nОтдел продаж',
+    phone: '123, "доб. 4"\r\nследующая строка',
+    status: 'done',
+    createdAt: '2026-10-07',
+  }]);
+  assert.equal(csv, [
+    '\uFEFF"Имя","Телефон","Статус","Дата создания"',
+    '"ООО, ""Ромашка""\nОтдел продаж","123, ""доб. 4""\r\nследующая строка","Завершён","2026-10-07"',
+    '',
+  ].join('\r\n'));
+});
+
+test('clientsToCsv returns a BOM-prefixed header when the list is empty', () => {
+  assert.equal(clientsToCsv([]), '\uFEFF"Имя","Телефон","Статус","Дата создания"\r\n');
+});
 
 test('setClientStatus changes only the given client and keeps other fields', () => {
   const result = setClientStatus(stored, 'a', 'done');

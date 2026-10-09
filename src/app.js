@@ -3,6 +3,7 @@
 import {
   SORT_OPTIONS,
   STATUSES,
+  clientsToCsv,
   createClient,
   firstInvalidField,
   getClientStatus,
@@ -33,6 +34,8 @@ const saveWarning = document.querySelector('#save-warning');
 const statusFilter = document.querySelector('#status-filter');
 const searchInput = document.querySelector('#search');
 const sortSelect = document.querySelector('#sort');
+const exportButton = document.querySelector('#export-csv');
+const exportMessage = document.querySelector('#export-message');
 const errorFields = {
   name: document.querySelector('#name-error'),
   phone: document.querySelector('#phone-error'),
@@ -399,6 +402,39 @@ sortSelect.addEventListener('change', () => {
 
 // The search query is intentionally not saved between reloads.
 searchInput.addEventListener('input', render);
+
+exportButton.addEventListener('click', () => {
+  if (clients.length === 0) {
+    exportMessage.textContent = 'Нечего экспортировать: список клиентов пуст.';
+    exportMessage.hidden = false;
+    return;
+  }
+
+  let url;
+  let link;
+  try {
+    const file = new Blob([clientsToCsv(clients)], { type: 'text/csv;charset=utf-8' });
+    url = URL.createObjectURL(file);
+    link = document.createElement('a');
+    link.href = url;
+    link.download = 'clients.csv';
+    document.body.append(link);
+    link.click();
+    exportMessage.textContent = 'Файл clients.csv подготовлен к скачиванию.';
+    exportMessage.hidden = false;
+  } catch (error) {
+    console.error('Не удалось экспортировать клиентов в CSV.', error);
+    exportMessage.textContent = 'Не удалось подготовить CSV-файл. Попробуйте ещё раз.';
+    exportMessage.hidden = false;
+  } finally {
+    setTimeout(() => {
+      link?.remove();
+      if (url) {
+        URL.revokeObjectURL(url);
+      }
+    }, 1000);
+  }
+});
 
 appendOptions(statusFilter, STATUSES);
 appendOptions(sortSelect, SORT_OPTIONS);

@@ -19,6 +19,23 @@ export function getClientStatus(client) {
   return isValidStatus(client?.status) ? client.status : DEFAULT_STATUS;
 }
 
+function csvCell(value) {
+  return `"${String(value ?? '').replaceAll('"', '""')}"`;
+}
+
+export function clientsToCsv(clients) {
+  const rows = [
+    ['Имя', 'Телефон', 'Статус', 'Дата создания'],
+    ...clients.map((client) => [
+      client.name,
+      client.phone,
+      STATUSES.find((status) => status.value === getClientStatus(client)).label,
+      client.createdAt,
+    ]),
+  ];
+  return `\uFEFF${rows.map((row) => row.map(csvCell).join(',')).join('\r\n')}\r\n`;
+}
+
 export function setClientStatus(clients, id, status) {
   if (!isValidStatus(status)) {
     throw new Error('Неизвестный статус клиента.');
